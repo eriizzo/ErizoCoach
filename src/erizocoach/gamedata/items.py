@@ -27,6 +27,8 @@ class Item:
     icon_path: str = ""  # ruta del icono en el cliente (/lol-game-data/assets/...)
     # Objeto del que sale al transformarse (Abrazo del serafín ← Bastón del arcángel); 0 = ninguno
     upgraded_from: int = 0
+    description: str = ""  # texto del cliente con sus etiquetas (gamedata/itemtext.py lo lee)
+    combine_cost: int = 0  # lo que cuesta juntar los componentes (el total sin ellos)
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> Item:
@@ -43,6 +45,8 @@ class Item:
             required_ally=as_str(data.get("requiredAlly")),
             icon_path=as_str(data.get("iconPath")),
             upgraded_from=as_int(data.get("specialRecipe")),
+            description=as_str(data.get("description")),
+            combine_cost=as_int(data.get("price")),
         )
 
     @property

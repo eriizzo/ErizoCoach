@@ -5,7 +5,8 @@
 * La ventana y la app se comunican directamente con el puente de pywebview: **no hay
   servidor ni puerto abierto** en tu PC.
 * La página solo puede pedir siete cosas a la app (``DesktopBridge``): el estado actual,
-  el icono de un objeto, campeón, runa o hechizo por su id numérico, pasar a segundo
+  el icono de un objeto, campeón, runa o hechizo por su id numérico, la ficha de un objeto
+  (también por id), pasar a segundo
   plano, abrir el cliente de LoL, poner otra página de runas u otros hechizos (solo números,
   que la app valida antes de escribir) y actualizar Erizo Coach.
 * Se carga con una política de seguridad estricta: solo su propio código (marcado con
@@ -34,6 +35,7 @@ from .intro import LaunchIntro
 from .page import inline_page
 from .tray import TrayIcon, default_icon_path
 from .web.icons import KINDS, IconProvider
+from .web.iteminfo import item_info
 from .web.presenter import State, UiPresenter
 from .web.window import DEFAULT_SIZE, list_monitors, window_geometry
 
@@ -139,6 +141,21 @@ class DesktopBridge:
         except Exception:
             return None
         return "data:image/png;base64," + base64.b64encode(body).decode("ascii") if body else None
+
+    def item_info(self, ident: Any) -> State | None:
+        """La ficha de un objeto (composición, orden de compra, estadísticas y pasivas)."""
+        if type(ident) is not int or not 0 < ident < 1_000_000:
+            return None
+
+        async def read() -> State | None:  # en el hilo de la app, como todo lo demás
+            return item_info(self._icons.gamedata, ident)
+
+        future = asyncio.run_coroutine_threadsafe(read(), self._loop)
+        try:
+            return future.result(timeout=ICON_TIMEOUT)
+        except Exception:
+            log.exception("No se pudo leer la ficha del objeto %s", ident)
+            return None
 
     def set_runes(self, page: Any) -> bool:
         """Pone en el cliente la página de runas que has elegido en la ventana."""

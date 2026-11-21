@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 0.25.0" src="https://img.shields.io/badge/versi%C3%B3n-0.25.0-c8aa6e?style=for-the-badge&labelColor=0c1b35">
+  <img alt="Versión 0.26.0" src="https://img.shields.io/badge/versi%C3%B3n-0.26.0-c8aa6e?style=for-the-badge&labelColor=0c1b35">
   <img alt="Windows 10 y 11" src="https://img.shields.io/badge/Windows-10%20%C2%B7%2011-c8aa6e?style=for-the-badge&labelColor=0c1b35&logo=windows&logoColor=f2dfae">
   <img alt="Python 3.13" src="https://img.shields.io/badge/Python-3.13-c8aa6e?style=for-the-badge&labelColor=0c1b35&logo=python&logoColor=f2dfae">
   <img alt="573 pruebas" src="https://img.shields.io/badge/pruebas-573-4fd6a2?style=for-the-badge&labelColor=0c1b35">
@@ -72,6 +72,13 @@ bloqueas, cómo va tu enfrentamiento.
 ### 🛒 La build en la tienda
 Un conjunto de objetos «Erizo Coach» con lo inicial, las botas, el núcleo en orden y lo que
 pide el equipo enemigo, listo en la pestaña *Conjuntos de objetos*.
+
+### 🔎 Cada objeto, a fondo
+- **Nombres a la vista**: los objetos y las runas llevan su nombre, sin pasar el ratón.
+- **Toca un objeto** y se dibuja su composición (los componentes van apareciendo nivel a
+  nivel) con **qué comprar primero** y por qué. En partida marca lo que ya llevas y te dice
+  qué toca **ahora**.
+- **Déjalo pulsado** (o clic derecho) y verás todo lo que da: estadísticas, pasivas y activas.
 
 </td>
 </tr>

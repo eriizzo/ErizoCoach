@@ -9,6 +9,7 @@ Seguridad:
   ``Origin`` del websocket: una web abierta en tu navegador no puede leer la ventana.
 * Cabeceras estrictas (CSP sin recursos externos, sin incrustar en otras webs).
 * Los iconos solo se piden por id numérico y solo de los recursos del juego.
+* La ficha de un objeto (composición, pasivas...) se pide por id numérico y con la clave.
 * Por el canal, la ventana solo puede pedir otra página de runas u otros hechizos (números
   que se validan con los datos del juego antes de escribirlos; las runas, solo en la
   página de Erizo Coach).
@@ -27,6 +28,7 @@ from aiohttp import WSMsgType, web
 from ...gamedata.catalog import GameData
 from ...lcu.connector import LcuConnector
 from .icons import IconProvider
+from .iteminfo import item_info
 from .presenter import State, UiPresenter
 
 log = logging.getLogger(__name__)
@@ -77,6 +79,7 @@ class UiServer:
         app.router.add_get(r"/icon/item/{item_id:\d{1,6}}.png", self._item_icon)
         app.router.add_get(r"/icon/champion/{champion_id:\d{1,6}}.png", self._champion_icon)
         app.router.add_get(r"/icon/{kind:perk|style|spell}/{ident:\d{1,6}}.png", self._game_icon)
+        app.router.add_get(r"/item/{item_id:\d{1,6}}.json", self._item_info)
         self._app = app
         presenter.add_listener(self._broadcast)
 
@@ -180,6 +183,16 @@ class UiServer:
                 await ws.send_json({"type": "state", "state": state})
             except (ConnectionError, RuntimeError):
                 self._sockets.discard(ws)
+
+    # --- Ficha de un objeto ------------------------------------------------------------
+
+    async def _item_info(self, request: web.Request) -> web.Response:
+        if not self._token_ok(request):
+            return web.Response(status=403, text="Clave no válida")
+        info = item_info(self._gamedata, int(request.match_info["item_id"]))
+        if info is None:
+            raise web.HTTPNotFound()
+        return web.json_response(info, headers={"Cache-Control": "no-store"})
 
     # --- Iconos (recursos del juego, a través del cliente) ------------------------------
 

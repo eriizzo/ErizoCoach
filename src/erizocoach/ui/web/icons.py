@@ -23,6 +23,10 @@ class IconProvider:
         self._connector = connector
         self._cache: OrderedDict[str, bytes] = OrderedDict()
 
+    @property
+    def gamedata(self) -> GameData:
+        return self._gamedata
+
     def path_for(self, kind: str, ident: int) -> str | None:
         if kind == "item":
             item = self._gamedata.item(ident)

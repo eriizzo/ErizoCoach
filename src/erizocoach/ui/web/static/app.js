@@ -131,9 +131,15 @@ function playEntrance() {
     const delay = index * 80;
     move(card, [{ opacity: 0, transform: "translateY(16px) scale(.98)" }, { opacity: 1, transform: "none" }],
       { duration: 560, delay, easing: EASE_OUT, fill: "backwards" });
-    const parts = card.querySelectorAll(".player, .rune-page .tree, .spells, .icons > .icon, .situational .entry, .buy-body, .components, .hero > div, .empty > :not(.emblem)");
+    const parts = card.querySelectorAll(".player, .rune-page .rune-line, .rune-page .tree-head, .rune-page .shard-row, .spells, .icons > .item-tile, .situational .entry, .buy-body, .components, .hero > div, .empty > :not(.emblem)");
     parts.forEach((part, order) => move(part, [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
       { duration: 420, delay: delay + 140 + Math.min(order, 10) * 35, easing: EASE_OUT, fill: "backwards" }));
+    // Un destello dorado recorre los nombres de los objetos y de la piedra angular, uno tras otro.
+    if (!reducedMotion.matches) {
+      card.querySelectorAll(".item-name, .rune-line.keystone .rune-name").forEach((name, order) =>
+        animate(name, [{ backgroundPosition: "100% 0" }, { backgroundPosition: "0 0" }],
+          { duration: 1100, delay: delay + 420 + Math.min(order, 14) * 70, easing: "ease-in-out" }));
+    }
   });
 }
 
@@ -164,16 +170,26 @@ function classes(...names) {
   return names.filter(Boolean).join(" ");
 }
 
-function itemIcon(item, { big = false, owned = false, next = false, count = 1 } = {}) {
+// Icono de un objeto. `label`: con su nombre debajo, siempre a la vista. Tocarlo abre su
+// ficha (composición y qué comprar primero); dejarlo pulsado, todo lo que da (ver itemSheet).
+function itemIcon(item, { big = false, owned = false, next = false, count = 1, label = false } = {}) {
   if (!item) return null;
   const price = item.price ? ` (${item.price} de oro)` : "";
   const status = owned ? ", ya comprado" : next ? ", siguiente compra" : "";
-  const img = el("img", { alt: owned ? `${item.name} (comprado)` : item.name });
+  const img = el("img", { alt: label ? "" : owned ? `${item.name} (comprado)` : item.name });
   setIcon(img, "item", item.id);
-  return el("span", { class: classes("icon", big && "big", owned && "owned", next && "next"), title: item.name + price + status }, [
+  const icon = el("span", { class: classes("icon", big && "big", owned && "owned", next && "next") }, [
     img,
     count > 1 ? el("span", { class: "count", text: `x${count}` }) : null,
   ]);
+  const says = `${item.name}${price}${status}. Toca para ver su composición; déjalo pulsado para ver todo lo que da`;
+  const tile = el("span", {
+    class: classes("item-tile", label && "labeled"), role: "button", tabindex: "0",
+    "aria-label": says, title: `${item.name}${price}`, "data-focus-key": `item:${item.id}`,
+  }, [icon, label ? el("span", { class: "item-name", "aria-hidden": "true", text: item.name }) : null]);
+  tile.icon = icon; // para animar el icono (compras) sin tocar el nombre
+  pressable(tile, item);
+  return tile;
 }
 
 function championIcon(id, name, { big = false } = {}) {
@@ -223,6 +239,7 @@ function viewOf(state) {
 // `boot`: el estado provisional del arranque se pinta sin animar; la entrada la hace el primero real.
 function render(state, boot = false) {
   lastState = state;
+  if (press && !boot) { pressDeferred = true; return; } // pulsando un objeto: se repinta al soltarlo
   const view = viewOf(state);
   const phase = state.phaseLabel || "";
   seen = { view: boot ? null : view, entering: !boot && view !== memory.view, phase, gold: null, buyId: null, canBuy: false, progress: 0, owned: new Set(), players: new Map() };
@@ -565,18 +582,32 @@ function renderLoadout(loadout, state) {
     const perks = page.perkIds;
     const fallback = loadout.page; // nombres por si aún no hay catálogo
     const perkName = (index, fromState) => name(perks[index]) || fromState.name;
+    // Cada runa con su nombre a la vista, como la página del cliente: un árbol por columna.
+    const line = (index, fromState, kind) => {
+      const label = perkName(index, fromState);
+      return el("div", { class: classes("rune-line", kind) }, [
+        gameIcon("perk", perks[index], "", kind),
+        el("span", { class: "rune-name", text: label }),
+      ]);
+    };
+    const head = (styleId, fromState) => el("div", { class: "tree-head" }, [
+      gameIcon("style", styleId, "", "style"),
+      el("span", { class: "tree-name", text: styleName(styleId) || fromState.name }),
+    ]);
     children.push(el("div", { class: "rune-page" }, [
-      el("div", { class: "tree" }, [
-        gameIcon("style", page.primaryStyleId, styleName(page.primaryStyleId) || fallback.primaryStyle.name, "style"),
-        gameIcon("perk", perks[0], perkName(0, fallback.keystone), "keystone"),
-        ...[1, 2, 3].map((i) => gameIcon("perk", perks[i], perkName(i, fallback.primary[i - 1] || {}), "minor")),
+      el("div", { class: "tree primary" }, [
+        head(page.primaryStyleId, fallback.primaryStyle),
+        line(0, fallback.keystone, "keystone"),
+        ...[1, 2, 3].map((i) => line(i, fallback.primary[i - 1] || {}, "minor")),
       ]),
-      el("div", { class: "tree" }, [
-        gameIcon("style", page.subStyleId, styleName(page.subStyleId) || fallback.subStyle.name, "style"),
-        ...[4, 5].map((i) => gameIcon("perk", perks[i], perkName(i, fallback.secondary[i - 4] || {}), "minor")),
-        el("span", { class: "shards" }, [6, 7, 8].map((i) => gameIcon("perk", perks[i], perkName(i, fallback.shards[i - 6] || {}), "shard"))),
+      el("div", { class: "tree secondary" }, [
+        head(page.subStyleId, fallback.subStyle),
+        ...[4, 5].map((i) => line(i, fallback.secondary[i - 4] || {}, "minor")),
+        el("div", { class: "shard-row" }, [6, 7, 8].map((i) => el("span", { class: "shard-chip" }, [
+          gameIcon("perk", perks[i], "", "shard"),
+          el("span", { class: "shard-name", text: perkName(i, fallback.shards[i - 6] || {}) }),
+        ]))),
       ]),
-      el("div", { class: "keystone-name", text: perkName(0, fallback.keystone) }),
     ]));
   }
   if (loadout.spells.length) {
@@ -849,22 +880,24 @@ function renderRuneEditor(page, catalog) {
 }
 
 function renderBuild(build) {
+  const labeled = (i, extra = {}) => itemIcon(i, { label: true, ...extra });
   const children = [
     originLine(build.source, "reglas por tipo de campeón (aún sin datos suficientes de partidas reales)"),
     el("div", { class: "section-label", text: "Inicio" }),
-    el("div", { class: "icons" }, build.starting.map((i) => itemIcon(i, { count: i.count }))),
+    el("div", { class: "icons" }, build.starting.map((i) => labeled(i, { count: i.count }))),
     el("div", { class: "section-label", text: "Núcleo, en orden" }),
     el("div", { class: "icons" }, build.core.flatMap((item, index) => [
-      index ? el("span", { class: "arrow", "aria-hidden": "true", text: "›" }) : null, itemIcon(item),
+      index ? el("span", { class: "arrow", "aria-hidden": "true", text: "›" }) : null, labeled(item),
     ])),
     el("div", { class: "section-label", text: "Build completa" }),
-    el("div", { class: "icons" }, build.full.map((i) => itemIcon(i))),
+    el("div", { class: "icons" }, build.full.map((i) => labeled(i))),
   ];
   if (build.situational.length) {
     children.push(el("div", { class: "section-label", text: "Contra este equipo" }));
     children.push(el("div", { class: "situational" }, build.situational.map((s) =>
       el("div", { class: "entry" }, [itemIcon(s), el("span", { class: "small", text: s.reason })]))));
   }
+  children.push(el("div", { class: "muted small hint-line", text: "Toca un objeto: su composición. Déjalo pulsado: todo lo que da." }));
   if (build.notes.length) children.push(bulletList(build.notes));
   return card("Build", children); // el arquetipo ya se ve junto a tu campeón
 }
@@ -934,7 +967,7 @@ function renderPurchase(game) {
   const halo = el("span", { class: "halo", "aria-hidden": "true" });
   const components = next.components.length
     ? el("div", { class: "components" }, [el("span", { class: "small muted", text: "Ya puedes comprar:" }),
-      ...next.components.map((c) => itemIcon(c))])
+      ...next.components.map((c) => itemIcon(c, { label: true }))])
     : null;
 
   // El oro líquido sube desde donde estaba (o desde vacío si el objeto es nuevo).
@@ -980,8 +1013,9 @@ function renderProgress(game) {
   const nextId = game.next ? game.next.id : null;
   const owned = game.buildProgress.filter((item) => item.owned).length;
   const icons = game.buildProgress.map((item) => {
-    const icon = itemIcon(item, { owned: item.owned, next: item.id === nextId });
-    if (!item.owned) return icon;
+    const tile = itemIcon(item, { owned: item.owned, next: item.id === nextId, label: true });
+    const icon = tile.icon;
+    if (!item.owned) return tile;
     seen.owned.add(item.id);
     if (!seen.entering && memory.view === "game" && !memory.owned.has(item.id)) {
       // Recién comprado: el icono se apaga con suavidad y le salta el ✓.
@@ -991,7 +1025,7 @@ function renderProgress(game) {
         move(icon, [{ transform: "scale(0)" }, { transform: "scale(1)" }], { duration: 480, delay: 160, easing: EASE_POP, fill: "backwards", pseudoElement: "::after" });
       });
     }
-    return icon;
+    return tile;
   });
   return card("Tu build", [el("div", { class: "icons" }, icons)], {
     className: "wide",
@@ -1188,6 +1222,338 @@ function setupStillWhenAway() {
   root.addEventListener("pointerenter", () => { hovered = true; update(); });
   root.addEventListener("pointerleave", () => { hovered = false; update(); });
   update();
+}
+
+// --- Ficha de un objeto ----------------------------------------------------------------
+// Tocar un objeto abre su composición (árbol de componentes, que se dibuja animado, y en qué
+// orden comprarlos). Dejarlo pulsado (o clic derecho) abre todo lo que da: estadísticas,
+// pasivas y activas. Las dos cosas están en la misma ficha, en dos pestañas.
+// La ficha vive fuera de #app: los repintados de cada segundo no la tocan.
+
+const LONG_PRESS = 450; // ms
+let press = null; // { id, timer, tile } mientras se mantiene pulsado un objeto
+let pressDeferred = false; // llegó un estado mientras pulsabas: se pinta al soltar
+let suppressClickUntil = 0; // tras una pulsación larga, el clic de soltar no cuenta
+const itemInfoCache = new Map(); // id -> ficha (o promesa)
+const sheet = { node: null, id: 0, tab: "recipe", back: [], trigger: "" };
+
+function pressable(tile, item) {
+  tile.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    endPress();
+    press = { id: item.id, tile, timer: 0 };
+    tile.classList.add("pressing");
+    press.timer = setTimeout(() => {
+      if (!press || press.id !== item.id) return;
+      suppressClickUntil = performance.now() + 900;
+      endPress();
+      openItem(item, "details", tile);
+    }, LONG_PRESS);
+  });
+  const cancel = () => { if (press && press.tile === tile) endPress(); };
+  tile.addEventListener("pointerleave", cancel);
+  tile.addEventListener("pointercancel", cancel);
+  // Al soltar, se repinta después del clic: si se repintara antes, el clic se perdería.
+  tile.addEventListener("pointerup", () => setTimeout(cancel, 0));
+  tile.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (performance.now() < suppressClickUntil) return;
+    openItem(item, "recipe", tile);
+  });
+  tile.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    endPress();
+    if (performance.now() < suppressClickUntil) return;
+    openItem(item, "details", tile);
+  });
+  tile.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openItem(item, event.shiftKey ? "details" : "recipe", tile);
+  });
+}
+
+function endPress() {
+  if (!press) return;
+  clearTimeout(press.timer);
+  press.tile.classList.remove("pressing");
+  press = null;
+  if (pressDeferred && lastState) {
+    pressDeferred = false;
+    render(lastState); // lo que llegó mientras pulsabas
+  }
+}
+
+function fetchItemInfo(id) {
+  const cached = itemInfoCache.get(id);
+  if (cached) return Promise.resolve(cached);
+  let request;
+  if (DESKTOP) {
+    const api = window.pywebview && window.pywebview.api;
+    request = api && api.item_info ? api.item_info(id) : Promise.resolve(null);
+  } else {
+    request = fetch(`/item/${id}.json?t=${encodeURIComponent(token)}`)
+      .then((response) => (response.ok ? response.json() : null));
+  }
+  const pending = Promise.resolve(request)
+    .then((info) => { if (info) itemInfoCache.set(id, info); else itemInfoCache.delete(id); return info; })
+    .catch(() => { itemInfoCache.delete(id); return null; });
+  itemInfoCache.set(id, pending);
+  return pending;
+}
+
+function sheetNode() {
+  if (sheet.node) return sheet.node;
+  const dialog = el("dialog", { class: "sheet", "aria-labelledby": "sheet-title" });
+  dialog.addEventListener("close", () => {
+    sheet.id = 0;
+    sheet.back = [];
+    const again = sheet.trigger && app.querySelector(`[data-focus-key="${CSS.escape(sheet.trigger)}"]`);
+    if (again) again.focus({ preventScroll: true });
+  });
+  // Clic fuera de la ficha (en el fondo oscurecido): se cierra.
+  dialog.addEventListener("click", (event) => { if (event.target === dialog) closeSheet(); });
+  document.body.append(dialog);
+  sheet.node = dialog;
+  return dialog;
+}
+
+function closeSheet() {
+  const dialog = sheet.node;
+  if (!dialog || !dialog.open) return;
+  const out = move(dialog, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.97)" }],
+    { duration: 180, easing: "ease-in", fill: "forwards" });
+  if (out) out.finished.then(() => { out.cancel(); dialog.close(); }).catch(() => dialog.close());
+  else dialog.close();
+}
+
+async function openItem(item, tab, trigger, { fromBack = false, push = false } = {}) {
+  const dialog = sheetNode();
+  if (push && sheet.id) sheet.back.push(sheet.id);
+  if (!fromBack && !push) sheet.back = [];
+  if (trigger && trigger.dataset) sheet.trigger = trigger.dataset.focusKey || "";
+  sheet.id = item.id;
+  sheet.tab = tab;
+  const wasOpen = dialog.open;
+  paintSheet({ id: item.id, name: item.name, price: item.price }, null);
+  if (!wasOpen) {
+    dialog.showModal();
+    move(dialog, [{ opacity: 0, transform: "translateY(14px) scale(.96)" }, { opacity: 1, transform: "none" }],
+      { duration: 320, easing: EASE_OUT });
+  }
+  const info = await fetchItemInfo(item.id);
+  if (sheet.id !== item.id || !dialog.open) return; // ya miras otro
+  paintSheet(info || { id: item.id, name: item.name, price: item.price }, info ? "ok" : "missing", { popIcon: true });
+}
+
+// Lo que ya llevas en partida (con repeticiones: dos Varas cuentan dos).
+function ownedCounts() {
+  const counts = new Map();
+  const me = lastState && lastState.game && lastState.game.me;
+  for (const id of (me && me.items) || []) counts.set(id, (counts.get(id) || 0) + 1);
+  return counts;
+}
+
+function paintSheet(info, status, { popIcon = false } = {}) {
+  const dialog = sheet.node;
+  const icon = el("span", { class: "sheet-icon" }, [el("img", { alt: "" })]);
+  setIcon(icon.firstChild, "item", info.id);
+  const back = sheet.back.length ? el("button", { class: "ghost sheet-back", type: "button", "aria-label": "Volver al objeto anterior", text: "‹" }) : null;
+  if (back) back.addEventListener("click", () => {
+    const previous = sheet.back.pop();
+    const cached = itemInfoCache.get(previous);
+    openItem(cached && cached.name ? cached : { id: previous, name: "", price: 0 }, sheet.tab, null, { fromBack: true });
+  });
+  const close = el("button", { class: "ghost sheet-close", type: "button", "aria-label": "Cerrar la ficha", text: "×" });
+  close.addEventListener("click", closeSheet);
+  const tabs = [["recipe", "Composición"], ["details", "Qué da"]].map(([key, label]) => {
+    const button = el("button", {
+      class: classes("sheet-tab", sheet.tab === key && "on"), type: "button", role: "tab",
+      "aria-selected": sheet.tab === key ? "true" : "false", "data-tab": key, text: label,
+    });
+    button.addEventListener("click", () => {
+      if (sheet.tab === key) return;
+      sheet.tab = key;
+      const cached = itemInfoCache.get(sheet.id);
+      paintSheet(cached && cached.name ? cached : info, cached && cached.name ? "ok" : status);
+      const again = dialog.querySelector(`[data-tab="${key}"]`);
+      if (again) again.focus({ preventScroll: true });
+    });
+    return button;
+  });
+  let body;
+  if (status === null) body = el("div", { class: "sheet-loading muted small", text: "Cargando…" });
+  else if (status === "missing") body = el("div", { class: "muted", text: "No tengo los datos de este objeto (¿está abierto el cliente de LoL?)." });
+  else body = sheet.tab === "details" ? renderDetails(info) : renderRecipe(info);
+  const header = el("div", { class: "sheet-head" }, [
+    back, icon,
+    el("div", { class: "sheet-title" }, [
+      el("h2", { id: "sheet-title", class: "sheet-name", text: info.name || "Objeto" }),
+      info.price ? el("span", { class: "gold-chip", text: `${info.price} de oro` }) : null,
+    ]),
+    close,
+  ]);
+  dialog.replaceChildren(
+    el("div", { class: "sheet-glow", "aria-hidden": "true" }),
+    header,
+    el("div", { class: "sheet-tabs", role: "tablist", "aria-label": "Qué ver del objeto" }, tabs),
+    el("div", { class: "sheet-body", role: "tabpanel" }, [body]),
+  );
+  // Al repintar la ficha se pierde el foco: va a la pestaña activa (teclado y lectores).
+  if (dialog.open && !dialog.contains(document.activeElement)) {
+    const target = dialog.querySelector(".sheet-tab.on") || close;
+    target.focus({ preventScroll: true });
+  }
+  if (popIcon) {
+    move(icon, [{ opacity: 0, transform: "scale(.5) rotate(-12deg)" }, { opacity: 1, transform: "none" }],
+      { duration: 520, easing: EASE_POP, fill: "backwards" });
+  }
+}
+
+// Árbol de componentes: se dibuja de arriba abajo (las líneas crecen y los iconos saltan).
+function renderRecipe(info) {
+  const owned = ownedCounts();
+  const left = new Map(owned);
+  const take = (id) => { const n = left.get(id) || 0; if (n > 0) { left.set(id, n - 1); return true; } return false; };
+  const children = info.tree.children;
+  const ownedChild = children.map((child) => take(child.id));
+  const order = info.order || [];
+  const firstToBuy = order.find((step) => !ownedChild[step.index]);
+  const rank = new Map(order.map((step, i) => [step.index, i + 1]));
+
+  // Nivel a nivel: el objeto, luego sus componentes y luego los de estos.
+  const perLevel = [];
+  let lastDelay = 0;
+  const delayFor = (depth) => {
+    const n = perLevel[depth] = (perLevel[depth] || 0) + 1;
+    const value = depth === 0 ? 0 : 200 + (depth - 1) * 280 + (n - 1) * 70;
+    lastDelay = Math.max(lastDelay, value);
+    return value;
+  };
+  const node = (data, depth, index, parentOwned) => {
+    const mine = depth === 1 ? ownedChild[index] : parentOwned;
+    const first = depth === 1 && firstToBuy && firstToBuy.index === index;
+    const img = el("img", { alt: "" });
+    setIcon(img, "item", data.id);
+    const button = el("button", {
+      type: "button", class: classes("tree-item", `d${depth}`, mine && "mine", first && "first"),
+      "aria-label": `${data.name}, ${data.price} de oro${mine ? ", ya lo tienes" : ""}${first ? ", cómpralo primero" : ""}`,
+      title: `${data.name} (${data.price} de oro)`,
+    }, [
+      el("span", { class: "tree-icon" }, [img]),
+      depth === 1 && rank.has(index) ? el("span", { class: "tree-rank", "aria-hidden": "true", text: String(rank.get(index)) }) : null,
+      el("span", { class: "tree-name", "aria-hidden": "true", text: data.name }),
+      el("span", { class: "tree-price", "aria-hidden": "true", text: String(data.price) }),
+    ]);
+    if (depth > 0) button.addEventListener("click", () => openItem(data, "recipe", null, { push: true }));
+    else button.disabled = true;
+    const wrap = el("div", { class: classes("tree-node", depth === 0 && "root") }, [button]);
+    wrap.style.setProperty("--d", `${delayFor(depth)}ms`);
+    if (data.children.length) {
+      const kids = el("div", { class: "tree-kids" }, data.children.map((child, i) => node(child, depth + 1, i, mine)));
+      wrap.append(kids);
+    }
+    return wrap;
+  };
+  const tree = el("div", { class: "recipe-tree" }, [node(info.tree, 0, 0, false)]);
+
+  if (!children.length) {
+    return el("div", { class: "recipe" }, [tree, el("div", { class: "muted small recipe-note", text: "Se compra tal cual: no tiene componentes." }), intoList(info)]);
+  }
+  const stepsDelay = lastDelay + 260;
+  const steps = order.map((step, i) => {
+    const part = children[step.index];
+    const mine = ownedChild[step.index];
+    const first = firstToBuy === step;
+    const img = el("img", { alt: "" });
+    setIcon(img, "item", part.id);
+    const row = el("li", { class: classes("step", mine && "mine", first && "first") }, [
+      el("span", { class: "step-num", "aria-hidden": "true", text: mine ? "✓" : String(i + 1) }),
+      el("span", { class: "step-icon" }, [img]),
+      el("div", { class: "step-text" }, [
+        el("span", { class: "step-name" }, [part.name, first ? el("span", { class: "first-tag", text: owned.size ? "Ahora" : "Primero" }) : null]),
+        el("small", { class: "muted", text: mine ? "Ya lo tienes" : step.reason }),
+      ]),
+      el("span", { class: "step-price", text: String(part.price) }),
+    ]);
+    row.style.setProperty("--d", `${stepsDelay + i * 90}ms`);
+    return row;
+  });
+  const combine = el("li", { class: "step combine" }, [
+    el("span", { class: "step-num", "aria-hidden": "true", text: "=" }),
+    el("span", { class: "step-icon" }, [(() => { const img = el("img", { alt: "" }); setIcon(img, "item", info.id); return img; })()]),
+    el("div", { class: "step-text" }, [
+      el("span", { class: "step-name", text: `Juntarlo: ${info.name}` }),
+      el("small", { class: "muted", text: "Con todos los componentes, en la tienda" }),
+    ]),
+    el("span", { class: "step-price", text: `+${info.combine}` }),
+  ]);
+  combine.style.setProperty("--d", `${stepsDelay + steps.length * 90}ms`);
+  return el("div", { class: "recipe" }, [
+    tree,
+    el("div", { class: "section-label", text: "Qué comprar primero" }),
+    el("ol", { class: "steps" }, [...steps, combine]),
+    intoList(info),
+  ]);
+}
+
+function intoList(info) {
+  if (!info.into || !info.into.length) return null;
+  return el("div", { class: "into" }, [
+    el("div", { class: "section-label", text: "Se usa para" }),
+    el("div", { class: "into-row" }, info.into.map((target) => {
+      const img = el("img", { alt: "" });
+      setIcon(img, "item", target.id);
+      const button = el("button", { type: "button", class: "into-item", title: `${target.name} (${target.price} de oro)` }, [
+        el("span", { class: "tree-icon" }, [img]),
+        el("span", { class: "tree-name", text: target.name }),
+      ]);
+      button.addEventListener("click", () => openItem(target, "recipe", null, { push: true }));
+      return button;
+    })),
+  ]);
+}
+
+// Todo lo que da: estadísticas (las cifras suben) y sus pasivas y activas.
+function renderDetails(info) {
+  const stats = info.stats.map((stat, i) => {
+    const value = el("span", { class: "stat-value", text: stat.value });
+    const row = el("li", { class: "stat" }, [value, el("span", { class: "stat-text", text: stat.text })]);
+    row.style.setProperty("--d", `${120 + i * 70}ms`);
+    const match = /^(\d+)(.*)$/.exec(stat.value);
+    if (match) setTimeout(() => { if (value.isConnected) countUpSuffix(value, Number(match[1]), match[2]); }, 120 + i * 70);
+    return row;
+  });
+  const blocks = info.blocks.map((block, i) => {
+    const text = el("p", { class: "power-text" }, block.runs.map((run) => (run.tone ? el("span", { class: `tone-${run.tone}`, text: run.text }) : run.text)));
+    const kind = block.kind === "passive" ? "Pasiva" : block.kind === "active" ? "Activa" : "";
+    const box = el("div", { class: classes("power", block.kind) }, [
+      block.name || kind ? el("div", { class: "power-head" }, [
+        kind ? el("span", { class: "power-kind", text: kind }) : null,
+        block.name ? el("span", { class: "power-name", text: block.name }) : null,
+        block.meta ? el("span", { class: "power-meta", text: block.meta }) : null,
+      ]) : null,
+      block.runs.length ? text : null,
+    ]);
+    box.style.setProperty("--d", `${160 + stats.length * 70 + i * 110}ms`);
+    return box;
+  });
+  if (!stats.length && !blocks.length) return el("div", { class: "muted", text: "El cliente no da más detalles de este objeto." });
+  return el("div", { class: "details" }, [
+    stats.length ? el("ul", { class: "stat-list" }, stats) : null,
+    ...blocks,
+  ]);
+}
+
+function countUpSuffix(node, to, suffix, duration = 600) {
+  if (reducedMotion.matches) return;
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    node.textContent = `${Math.round(to * (1 - (1 - t) ** 3))}${suffix}`;
+    if (t < 1 && node.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 setupBrandCheer();

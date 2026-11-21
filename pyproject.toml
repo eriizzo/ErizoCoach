@@ -1,6 +1,6 @@
 [project]
 name = "erizocoach"
-version = "0.25.0"
+version = "0.26.0"
 description = "Asistente local para League of Legends: runas, hechizos y builds recomendadas."
 readme = "README.md"
 requires-python = ">=3.13"
